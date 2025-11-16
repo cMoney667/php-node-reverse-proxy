@@ -7,7 +7,9 @@ EXPOSE 80
 
 # Start command: render the template, then start nginx in foreground
 CMD ["/bin/sh", "-c", \
-  "envsubst < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && \
+  "envsubst '$NODE_INTERNAL_URL $PHP_INTERNAL_URL' \
+     < /etc/nginx/templates/default.conf.template \
+     > /etc/nginx/conf.d/default.conf && \
    exec nginx -g 'daemon off;'"]
 
 #FROM alpine:latest
