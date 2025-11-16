@@ -1,0 +1,53 @@
+upstream node_app {
+    # ONE_server because Render's discovery hostname already load balances
+    server ${NODE_INTERNAL_URL};
+}
+
+upstream php_fpm {
+    server ${PHP_INTERNAL_URL};
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # This path only has to be valid inside the PHP container; nginx just forwards
+    root /var/www/html;
+    index index.php index.html;
+
+    # 1) Send everything to Node first
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_intercept_errors on;
+        error_page 404 = @php_fallback;
+
+        proxy_pass http://node_app;
+    }
+
+    # 2) On 404 from Node, fall back to PHP
+    location @php_fallback {
+        include /etc/nginx/fastcgi_params;
+
+        # Path as seen by the PHP container
+        fastcgi_param SCRIPT_FILENAME /var/www/html/public/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_param REQUEST_URI $request_uri;
+
+        fastcgi_pass php_fpm;
+    }
+
+    # Optional: direct .php handling
+    location ~ \.php$ {
+        include /etc/nginx/fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/html$fastcgi_script_name;
+        fastcgi_param SCRIPT_NAME $fastcgi_script_name;
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_pass php_fpm;
+    }
+}
